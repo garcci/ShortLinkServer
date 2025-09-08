@@ -5,10 +5,17 @@ import { mainPageTemplate } from '../templates/mainPage.js';
 import { adminLoginTemplate } from '../templates/adminLogin.js';
 import { adminDashboardTemplate } from '../templates/adminDashboard.js';
 import { getLinkFromCache, setLinkToCache } from '../utils/cache.js';
+import { info as logInfo, error as logError } from '../utils/logger.js';
 
-// 处理主页
+/**
+ * 处理主页
+ * @param {Request} request - HTTP请求对象
+ * @param {object} env - Cloudflare环境对象
+ * @returns {Response} HTTP响应对象
+ */
 export async function handleMainPage(request, env) {
   const html = mainPageTemplate();
+  logInfo('访问主页');
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8'
@@ -16,9 +23,15 @@ export async function handleMainPage(request, env) {
   });
 }
 
-// 处理管理员登录页面
+/**
+ * 处理管理员登录页面
+ * @param {Request} request - HTTP请求对象
+ * @param {object} env - Cloudflare环境对象
+ * @returns {Response} HTTP响应对象
+ */
 export async function handleAdminLogin(request, env) {
   const html = adminLoginTemplate();
+  logInfo('访问管理员登录页面');
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8'
@@ -26,9 +39,15 @@ export async function handleAdminLogin(request, env) {
   });
 }
 
-// 处理管理员控制台
+/**
+ * 处理管理员控制台
+ * @param {Request} request - HTTP请求对象
+ * @param {object} env - Cloudflare环境对象
+ * @returns {Response} HTTP响应对象
+ */
 export async function handleAdminDashboard(request, env) {
   const html = adminDashboardTemplate();
+  logInfo('访问管理员控制台');
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8'
@@ -36,23 +55,38 @@ export async function handleAdminDashboard(request, env) {
   });
 }
 
-// 处理链接跳转
+/**
+ * 处理链接跳转
+ * @param {Request} request - HTTP请求对象
+ * @param {object} env - Cloudflare环境对象
+ * @param {string} slug - 链接标识
+ * @returns {Response} HTTP响应对象
+ */
 export async function handleRedirect(request, env, slug) {
   // 首先尝试从缓存获取
   let link = getLinkFromCache(slug);
   
   if (!link) {
     // 缓存未命中，查询数据库
-    const stmt = env.DB.prepare('SELECT * FROM links WHERE slug = ?');
-    link = await stmt.bind(slug).first();
-    
-    if (link) {
-      // 将结果存入缓存
-      setLinkToCache(slug, link);
+    try {
+      const stmt = env.DB.prepare('SELECT * FROM links WHERE slug = ?');
+      link = await stmt.bind(slug).first();
+      
+      if (link) {
+        // 将结果存入缓存
+        setLinkToCache(slug, link);
+        logInfo('从数据库获取链接信息并缓存', { slug });
+      }
+    } catch (e) {
+      logError('查询链接信息时出错', { error: e.message, slug });
+      return new Response('服务器内部错误', { status: 500 });
     }
+  } else {
+    logInfo('从缓存获取链接信息', { slug });
   }
 
   if (!link) {
+    logInfo('访问不存在的链接', { slug });
     return new Response('您访问的短链接不存在', { status: 404 });
   }
 
@@ -61,15 +95,22 @@ export async function handleRedirect(request, env, slug) {
   
   // 如果是文本内容且需要预览
   if (link.is_text && preview) {
+    logInfo('显示文本预览', { slug });
     return handleTextPreview(link);
   }
 
   // 更新点击次数（仅在数据库中更新，缓存中不更新点击数）
-  const updateStmt = env.DB.prepare('UPDATE links SET clicks = clicks + 1 WHERE id = ?');
-  await updateStmt.bind(link.id).run();
+  try {
+    const updateStmt = env.DB.prepare('UPDATE links SET clicks = clicks + 1 WHERE id = ?');
+    await updateStmt.bind(link.id).run();
+    logInfo('更新链接点击次数', { slug, clicks: link.clicks + 1 });
+  } catch (e) {
+    logError('更新链接点击次数时出错', { error: e.message, slug });
+  }
 
   // 如果是文本内容，直接展示
   if (link.is_text) {
+    logInfo('返回文本内容', { slug });
     return new Response(link.target, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8'
@@ -78,10 +119,15 @@ export async function handleRedirect(request, env, slug) {
   }
 
   // 如果是网址，则执行跳转
+  logInfo('重定向到目标网址', { slug, target: link.target });
   return Response.redirect(link.target, 302);
 }
 
-// 处理文本预览
+/**
+ * 处理文本预览
+ * @param {object} link - 链接对象
+ * @returns {Response} HTTP响应对象
+ */
 function handleTextPreview(link) {
   const html = `
   <!DOCTYPE html>
@@ -197,7 +243,11 @@ function handleTextPreview(link) {
   });
 }
 
-// HTML转义函数
+/**
+ * HTML转义函数
+ * @param {string} text - 待转义的文本
+ * @returns {string} 转义后的文本
+ */
 function escapeHtml(text) {
   return text
     .replace(/&/g, "&amp;")

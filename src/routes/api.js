@@ -2,19 +2,16 @@
  * API 路由处理模块
  */
 import { deleteLinkFromCache } from '../utils/cache.js';
-import { generateSmartSlug, validateAndCleanSlug } from '../utils/ai.js';
+import { generateSmartSlug, validateAndCleanSlug, generateFallbackSlug } from '../utils/ai.js';
+import { error as logError, info as logInfo } from '../utils/logger.js';
+import { SLUG_CONFIG } from '../utils/config.js';
 
-// 生成随机 slug
-function generateSlug(length = 6) {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length));
-  }
-  return result;
-}
-
-// 处理创建短链接
+/**
+ * 处理创建短链接
+ * @param {Request} request - HTTP请求对象
+ * @param {object} env - Cloudflare环境对象
+ * @returns {Response} HTTP响应对象
+ */
 export async function handleCreateShortLink(request, env) {
   try {
     const { content, slug, useAI = false } = await request.json();
@@ -55,14 +52,15 @@ export async function handleCreateShortLink(request, env) {
     else if (useAI || !finalSlug) {
       try {
         finalSlug = await generateSmartSlug(env, content, isText);
+        logInfo('使用AI生成短链接后缀', { content, generatedSlug: finalSlug });
       } catch (error) {
-        console.error('AI生成失败，使用默认方法:', error);
-        finalSlug = generateSlug(8);
+        logError('AI生成失败，使用默认方法', { error: error.message });
+        finalSlug = generateFallbackSlug(SLUG_CONFIG.DEFAULT_LENGTH);
       }
     } 
     // 默认情况生成随机 slug
     else {
-      finalSlug = generateSlug();
+      finalSlug = generateFallbackSlug(SLUG_CONFIG.DEFAULT_LENGTH);
     }
 
     // 检查 slug 是否已存在
@@ -88,7 +86,7 @@ export async function handleCreateShortLink(request, env) {
         }
         // 如果还是冲突，使用随机生成
         if (counter >= 10) {
-          finalSlug = generateSlug(8);
+          finalSlug = generateFallbackSlug(SLUG_CONFIG.DEFAULT_LENGTH + 2);
         }
       } else {
         return new Response(JSON.stringify({ error: '短链接后缀已存在，请尝试其他后缀' }), {
@@ -107,6 +105,8 @@ export async function handleCreateShortLink(request, env) {
 
     const shortUrl = new URL(request.url).origin + '/' + finalSlug;
 
+    logInfo('成功创建短链接', { slug: finalSlug, isText, isAI: useAI || !slug });
+
     return new Response(JSON.stringify({ 
       shortUrl,
       slug: finalSlug,
@@ -115,7 +115,7 @@ export async function handleCreateShortLink(request, env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (e) {
-    console.error('创建短链接时出错:', e);
+    logError('创建短链接时出错', { error: e.message, stack: e.stack });
     return new Response(JSON.stringify({ error: '服务器内部错误，请稍后重试' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -123,7 +123,12 @@ export async function handleCreateShortLink(request, env) {
   }
 }
 
-// 处理管理员登录 API
+/**
+ * 处理管理员登录 API
+ * @param {Request} request - HTTP请求对象
+ * @param {object} env - Cloudflare环境对象
+ * @returns {Response} HTTP响应对象
+ */
 export async function handleAdminLoginAPI(request, env) {
   try {
     const { password } = await request.json();
@@ -131,12 +136,14 @@ export async function handleAdminLoginAPI(request, env) {
     // 在实际应用中，我们会检查存储的哈希值
     // 这里使用简单检查
     if (password === 'admin') {
+      logInfo('管理员登录成功');
       return new Response(JSON.stringify({ success: true }), {
         headers: {
           'Content-Type': 'application/json'
         }
       });
     } else {
+      logInfo('管理员登录失败', { reason: '密码错误' });
       return new Response(JSON.stringify({ error: '密码错误' }), {
         status: 401,
         headers: {
@@ -145,6 +152,7 @@ export async function handleAdminLoginAPI(request, env) {
       });
     }
   } catch (e) {
+    logError('管理员登录时出错', { error: e.message });
     return new Response(JSON.stringify({ error: '服务器内部错误，请稍后重试' }), {
       status: 500,
       headers: {
@@ -154,41 +162,68 @@ export async function handleAdminLoginAPI(request, env) {
   }
 }
 
-// 处理管理员 API 请求
+/**
+ * 处理管理员 API 请求
+ * @param {Request} request - HTTP请求对象
+ * @param {object} env - Cloudflare环境对象
+ * @returns {Response} HTTP响应对象
+ */
 export async function handleAdminAPI(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
 
   // 获取所有链接
   if (path === '/admin/api/links') {
-    const { results } = await env.DB.prepare('SELECT * FROM links ORDER BY created_at DESC').all();
-    return new Response(JSON.stringify(results), {
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    try {
+      const { results } = await env.DB.prepare('SELECT * FROM links ORDER BY created_at DESC').all();
+      logInfo('获取所有链接成功', { count: results.length });
+      return new Response(JSON.stringify(results), {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (e) {
+      logError('获取链接列表时出错', { error: e.message });
+      return new Response(JSON.stringify({ error: '获取链接列表失败' }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    }
   }
 
   // 删除链接
   const deleteMatch = path.match(/^\/admin\/api\/links\/(\d+)$/);
   if (request.method === 'DELETE' && deleteMatch) {
     const id = deleteMatch[1];
-    // 先查询要删除的链接信息，用于清理缓存
-    const link = await env.DB.prepare('SELECT slug FROM links WHERE id = ?').bind(id).first();
-    
-    // 从数据库删除
-    await env.DB.prepare('DELETE FROM links WHERE id = ?').bind(id).run();
-    
-    // 如果存在，则从缓存中删除
-    if (link) {
-      deleteLinkFromCache(link.slug);
-    }
-    
-    return new Response(JSON.stringify({ success: true }), {
-      headers: {
-        'Content-Type': 'application/json'
+    try {
+      // 先查询要删除的链接信息，用于清理缓存
+      const link = await env.DB.prepare('SELECT slug FROM links WHERE id = ?').bind(id).first();
+      
+      // 从数据库删除
+      await env.DB.prepare('DELETE FROM links WHERE id = ?').bind(id).run();
+      
+      // 如果存在，则从缓存中删除
+      if (link) {
+        deleteLinkFromCache(link.slug);
+        logInfo('删除链接成功', { id, slug: link.slug });
       }
-    });
+      
+      return new Response(JSON.stringify({ success: true }), {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (e) {
+      logError('删除链接时出错', { error: e.message, id });
+      return new Response(JSON.stringify({ error: '删除链接失败' }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    }
   }
 
   return new Response('页面未找到', { status: 404 });

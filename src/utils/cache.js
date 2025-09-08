@@ -2,10 +2,10 @@
  * 缓存工具模块
  * 用于减少数据库请求次数，提高性能并节省请求配额
  */
+import { CACHE_CONFIG } from './config.js';
 
-// 使用全局变量作为内存缓存
+// 使用模块作用域的变量作为内存缓存
 const linkCache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存时间
 
 /**
  * 获取链接缓存
@@ -14,7 +14,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5分钟缓存时间
  */
 export function getLinkFromCache(slug) {
   const cached = linkCache.get(slug);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+  if (cached && Date.now() - cached.timestamp < CACHE_CONFIG.TTL) {
     return cached.data;
   }
   // 缓存过期，删除条目
@@ -47,11 +47,14 @@ export function deleteLinkFromCache(slug) {
  */
 export function cleanupExpiredCache() {
   const now = Date.now();
+  let cleanedCount = 0;
   for (const [key, value] of linkCache.entries()) {
-    if (now - value.timestamp >= CACHE_TTL) {
+    if (now - value.timestamp >= CACHE_CONFIG.TTL) {
       linkCache.delete(key);
+      cleanedCount++;
     }
   }
+  return cleanedCount;
 }
 
 /**

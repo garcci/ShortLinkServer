@@ -2,6 +2,8 @@
  * AI 工具模块
  * 使用 Cloudflare Workers AI 生成智能短链接后缀
  */
+import { AI_CONFIG, SLUG_CONFIG } from './config.js';
+import { error as logError } from './logger.js';
 
 /**
  * 使用 AI 生成智能短链接后缀
@@ -34,11 +36,11 @@ export async function generateSmartSlug(env, content, isText) {
 
     // 调用 AI 模型生成后缀
     const response = await env.AI.run(
-      "@cf/meta/llama-3.1-8b-instruct",
+      AI_CONFIG.MODEL,
       { 
         prompt: prompt,
-        max_tokens: 15,
-        temperature: 0.7
+        max_tokens: AI_CONFIG.MAX_TOKENS,
+        temperature: AI_CONFIG.TEMPERATURE
       }
     );
 
@@ -54,18 +56,18 @@ export async function generateSmartSlug(env, content, isText) {
       .replace(/^-|-$/g, ''); // 移除首尾连字符
     
     // 如果生成的后缀为空或太短，使用默认方法
-    if (!slug || slug.length < 2) {
+    if (!slug || slug.length < SLUG_CONFIG.MIN_LENGTH) {
       return generateFallbackSlug();
     }
     
     // 限制长度
-    if (slug.length > 20) {
-      slug = slug.substring(0, 20).replace(/-+$/, ''); // 移除结尾的连字符
+    if (slug.length > SLUG_CONFIG.MAX_LENGTH) {
+      slug = slug.substring(0, SLUG_CONFIG.MAX_LENGTH).replace(/-+$/, ''); // 移除结尾的连字符
     }
     
     return slug;
   } catch (error) {
-    console.error('AI生成短链接后缀失败:', error);
+    logError('AI生成短链接后缀失败', { error: error.message, content, isText });
     // 出错时使用备用方案
     return generateFallbackSlug();
   }
@@ -73,9 +75,10 @@ export async function generateSmartSlug(env, content, isText) {
 
 /**
  * 生成备用短链接后缀
+ * @param {number} length - 长度
  * @returns {string} 随机生成的后缀
  */
-function generateFallbackSlug(length = 8) {
+export function generateFallbackSlug(length = AI_CONFIG.FALLBACK_LENGTH) {
   const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
   for (let i = 0; i < length; i++) {
@@ -95,5 +98,5 @@ export function validateAndCleanSlug(slug) {
     .replace(/[^a-z0-9\-_]/g, '') // 只保留字母、数字、连字符和下划线
     .replace(/-+/g, '-') // 多个连字符合并为一个
     .replace(/^-|-$/g, '') // 移除首尾连字符
-    .substring(0, 30); // 限制长度
+    .substring(0, SLUG_CONFIG.MAX_LENGTH); // 限制长度
 }
