@@ -130,6 +130,38 @@ export function adminDashboardTemplate() {
         font-weight: bold;
         color: #27ae60;
       }
+      .controls {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        align-items: center;
+      }
+      .refresh-btn {
+        background-color: #27ae60;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 0.9em;
+        transition: background-color 0.3s;
+      }
+      .refresh-btn:hover {
+        background-color: #219653;
+      }
+      .auto-refresh {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .cache-info {
+        background-color: #e8f5e9;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 20px;
+        font-size: 0.9em;
+        color: #2e7d32;
+      }
     </style>
   </head>
   <body>
@@ -139,6 +171,14 @@ export function adminDashboardTemplate() {
     </div>
     
     <div class="container">
+      <div class="controls">
+        <div class="auto-refresh">
+          <input type="checkbox" id="autoRefresh" />
+          <label for="autoRefresh">每30秒自动刷新</label>
+        </div>
+        <button id="refreshBtn" class="refresh-btn">刷新数据</button>
+      </div>
+      
       <div class="stats">
         <div class="stat-card">
           <h3>总链接数</h3>
@@ -174,11 +214,27 @@ export function adminDashboardTemplate() {
           <!-- Links will be loaded here -->
         </tbody>
       </table>
+      
+      <div class="cache-info">
+        系统使用智能缓存机制以减少数据库请求，提高响应速度并节省请求配额。默认情况下，数据每30秒自动刷新一次。
+      </div>
     </div>
 
     <script>
+      let lastLoadTime = 0;
+      let autoRefreshInterval = null;
+      
       // Load all links and stats
       async function loadLinks() {
+        const now = Date.now();
+        // 限制请求频率，至少间隔2秒
+        if (now - lastLoadTime < 2000) {
+          console.log('请求过于频繁，跳过本次请求');
+          return;
+        }
+        
+        lastLoadTime = now;
+        
         const response = await fetch('/admin/api/links');
         if (response.ok) {
           const links = await response.json();
@@ -244,6 +300,22 @@ export function adminDashboardTemplate() {
         }
       }
       
+      // Refresh button handler
+      document.getElementById('refreshBtn').addEventListener('click', loadLinks);
+      
+      // Auto refresh toggle
+      document.getElementById('autoRefresh').addEventListener('change', function() {
+        if (this.checked) {
+          // 每30秒自动刷新一次
+          autoRefreshInterval = setInterval(loadLinks, 30000);
+        } else {
+          if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+          }
+        }
+      });
+      
       // Logout
       document.getElementById('logoutBtn').addEventListener('click', () => {
         // In a real implementation, we would clear session/cookie
@@ -251,7 +323,9 @@ export function adminDashboardTemplate() {
       });
       
       // Load links on page load
-      loadLinks();
+      document.addEventListener('DOMContentLoaded', function() {
+        loadLinks();
+      });
     </script>
   </body>
   </html>

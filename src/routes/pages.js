@@ -4,6 +4,7 @@
 import { mainPageTemplate } from '../templates/mainPage.js';
 import { adminLoginTemplate } from '../templates/adminLogin.js';
 import { adminDashboardTemplate } from '../templates/adminDashboard.js';
+import { getLinkFromCache, setLinkToCache } from '../utils/cache.js';
 
 // 处理主页
 export async function handleMainPage(request, env) {
@@ -37,14 +38,33 @@ export async function handleAdminDashboard(request, env) {
 
 // 处理链接跳转
 export async function handleRedirect(request, env, slug) {
-  const stmt = env.DB.prepare('SELECT * FROM links WHERE slug = ?');
-  const link = await stmt.bind(slug).first();
+  // 首先尝试从缓存获取
+  let link = getLinkFromCache(slug);
+  
+  if (!link) {
+    // 缓存未命中，查询数据库
+    const stmt = env.DB.prepare('SELECT * FROM links WHERE slug = ?');
+    link = await stmt.bind(slug).first();
+    
+    if (link) {
+      // 将结果存入缓存
+      setLinkToCache(slug, link);
+    }
+  }
 
   if (!link) {
     return new Response('您访问的短链接不存在', { status: 404 });
   }
 
-  // 更新点击次数
+  // 检查是否需要预览文本内容
+  const preview = new URL(request.url).searchParams.get('preview') === '1';
+  
+  // 如果是文本内容且需要预览
+  if (link.is_text && preview) {
+    return handleTextPreview(link);
+  }
+
+  // 更新点击次数（仅在数据库中更新，缓存中不更新点击数）
   const updateStmt = env.DB.prepare('UPDATE links SET clicks = clicks + 1 WHERE id = ?');
   await updateStmt.bind(link.id).run();
 
@@ -59,4 +79,130 @@ export async function handleRedirect(request, env, slug) {
 
   // 如果是网址，则执行跳转
   return Response.redirect(link.target, 302);
+}
+
+// 处理文本预览
+function handleTextPreview(link) {
+  const html = `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>内容预览 - 短链接服务</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f8f9fa;
+      }
+      .container {
+        background-color: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+      h1 {
+        color: #2c3e50;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .content {
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.6;
+        color: #333;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        margin-bottom: 30px;
+        max-height: 60vh;
+        overflow-y: auto;
+      }
+      .actions {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .btn {
+        padding: 12px 24px;
+        border-radius: 5px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.3s;
+        cursor: pointer;
+        border: none;
+        font-size: 16px;
+      }
+      .btn-primary {
+        background-color: #3498db;
+        color: white;
+      }
+      .btn-primary:hover {
+        background-color: #2980b9;
+      }
+      .btn-secondary {
+        background-color: #95a5a6;
+        color: white;
+      }
+      .btn-secondary:hover {
+        background-color: #7f8c8d;
+      }
+      .info {
+        background-color: #fff8e1;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        border-left: 4px solid #ffc107;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>内容预览</h1>
+      
+      <div class="info">
+        <p>您正在预览短链接中的文本内容。确认无误后可点击"查看完整内容"按钮。</p>
+      </div>
+      
+      <div class="content">${escapeHtml(link.target)}</div>
+      
+      <div class="actions">
+        <button class="btn btn-primary" onclick="window.location.href = window.location.pathname">查看完整内容</button>
+        <button class="btn btn-secondary" onclick="window.history.back()">返回</button>
+      </div>
+    </div>
+    
+    <script>
+      // 检测是否为纯文本链接（没有preview参数）
+      const urlParams = new URLSearchParams(window.location.search);
+      if (!urlParams.has('preview')) {
+        // 如果用户直接访问文本链接，显示预览
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.set('preview', '1');
+        window.history.replaceState({}, '', newUrl);
+      }
+    </script>
+  </body>
+  </html>
+  `;
+  
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8'
+    }
+  });
+}
+
+// HTML转义函数
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }

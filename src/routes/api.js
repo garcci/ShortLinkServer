@@ -1,6 +1,8 @@
 /**
  * API 路由处理模块
  */
+import { deleteLinkFromCache } from '../utils/cache.js';
+import { generateSmartSlug, validateAndCleanSlug } from '../utils/ai.js';
 
 // 生成随机 slug
 function generateSlug(length = 6) {
@@ -15,7 +17,7 @@ function generateSlug(length = 6) {
 // 处理创建短链接
 export async function handleCreateShortLink(request, env) {
   try {
-    const { content, slug } = await request.json();
+    const { content, slug, useAI = false } = await request.json();
 
     if (!content) {
       return new Response(JSON.stringify({ error: '内容不能为空' }), {
@@ -36,9 +38,30 @@ export async function handleCreateShortLink(request, env) {
 
     const isText = !isUrl;
 
-    // 如果没有提供 slug，则生成一个
+    // 处理 slug
     let finalSlug = slug;
-    if (!finalSlug) {
+    
+    // 如果用户提供了 slug，验证并清理它
+    if (finalSlug) {
+      finalSlug = validateAndCleanSlug(finalSlug);
+      if (!finalSlug) {
+        return new Response(JSON.stringify({ error: '自定义短链接后缀无效' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    } 
+    // 如果用户要求使用 AI 生成，或者没有提供 slug 且启用了 AI
+    else if (useAI || !finalSlug) {
+      try {
+        finalSlug = await generateSmartSlug(env, content, isText);
+      } catch (error) {
+        console.error('AI生成失败，使用默认方法:', error);
+        finalSlug = generateSlug(8);
+      }
+    } 
+    // 默认情况生成随机 slug
+    else {
       finalSlug = generateSlug();
     }
 
@@ -48,10 +71,31 @@ export async function handleCreateShortLink(request, env) {
       .first();
 
     if (existing) {
-      return new Response(JSON.stringify({ error: '短链接后缀已存在，请尝试其他后缀' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      // 如果是AI生成的slug冲突，尝试添加数字后缀
+      if (useAI || !slug) {
+        let counter = 1;
+        let newSlug = `${finalSlug}-${counter}`;
+        while (counter < 10) { // 最多尝试10次
+          const check = await env.DB.prepare('SELECT id FROM links WHERE slug = ?')
+            .bind(newSlug)
+            .first();
+          if (!check) {
+            finalSlug = newSlug;
+            break;
+          }
+          counter++;
+          newSlug = `${finalSlug}-${counter}`;
+        }
+        // 如果还是冲突，使用随机生成
+        if (counter >= 10) {
+          finalSlug = generateSlug(8);
+        }
+      } else {
+        return new Response(JSON.stringify({ error: '短链接后缀已存在，请尝试其他后缀' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // 插入数据库
@@ -63,10 +107,15 @@ export async function handleCreateShortLink(request, env) {
 
     const shortUrl = new URL(request.url).origin + '/' + finalSlug;
 
-    return new Response(JSON.stringify({ shortUrl }), {
+    return new Response(JSON.stringify({ 
+      shortUrl,
+      slug: finalSlug,
+      isAI: useAI || !slug // 标记是否使用了AI生成
+    }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (e) {
+    console.error('创建短链接时出错:', e);
     return new Response(JSON.stringify({ error: '服务器内部错误，请稍后重试' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -124,7 +173,17 @@ export async function handleAdminAPI(request, env) {
   const deleteMatch = path.match(/^\/admin\/api\/links\/(\d+)$/);
   if (request.method === 'DELETE' && deleteMatch) {
     const id = deleteMatch[1];
+    // 先查询要删除的链接信息，用于清理缓存
+    const link = await env.DB.prepare('SELECT slug FROM links WHERE id = ?').bind(id).first();
+    
+    // 从数据库删除
     await env.DB.prepare('DELETE FROM links WHERE id = ?').bind(id).run();
+    
+    // 如果存在，则从缓存中删除
+    if (link) {
+      deleteLinkFromCache(link.slug);
+    }
+    
     return new Response(JSON.stringify({ success: true }), {
       headers: {
         'Content-Type': 'application/json'

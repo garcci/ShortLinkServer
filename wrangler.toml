@@ -13,3 +13,6 @@ database_id = "08528f8a-8741-402f-8f43-a64a76a1cea3"
 [[routes]]
 pattern = "link.gjqqq.com"
 custom_domain = true
+
+[ai]
+binding = "AI"

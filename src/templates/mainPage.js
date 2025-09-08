@@ -63,9 +63,16 @@ export function mainPageTemplate() {
         font-size: 16px;
         font-weight: 600;
         transition: background-color 0.3s;
+        margin-bottom: 10px;
       }
       button:hover {
         background-color: #2980b9;
+      }
+      .btn-secondary {
+        background-color: #95a5a6;
+      }
+      .btn-secondary:hover {
+        background-color: #7f8c8d;
       }
       .result {
         margin-top: 20px;
@@ -122,10 +129,47 @@ export function mainPageTemplate() {
       .instructions li {
         margin-bottom: 8px;
       }
+      .cache-info {
+        background-color: #e8f5e9;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 20px;
+        font-size: 0.9em;
+        color: #2e7d32;
+      }
+      .ai-info {
+        background-color: #f3e5f5;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 10px;
+        font-size: 0.9em;
+        color: #6a1b9a;
+      }
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+      .checkbox-group input {
+        margin-right: 10px;
+      }
+      .feature-highlight {
+        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        text-align: center;
+      }
     </style>
   </head>
   <body>
     <div class="container">
+      <div class="feature-highlight">
+        <h2>✨ AI智能短链接生成 ✨</h2>
+        <p>现在支持使用人工智能为您的链接生成有意义的短链接后缀</p>
+      </div>
+      
       <h1>短链接服务</h1>
       
       <div class="instructions">
@@ -133,6 +177,7 @@ export function mainPageTemplate() {
         <ul>
           <li>在上方输入框中粘贴长链接或输入文本内容</li>
           <li>可选择自定义短链接后缀，留空则自动生成</li>
+          <li>启用"AI智能生成"可让AI为您创建有意义的短链接</li>
           <li>点击"生成短链接"按钮完成创建</li>
           <li>访问短链接时，网址将自动跳转或显示文本内容</li>
         </ul>
@@ -148,13 +193,26 @@ export function mainPageTemplate() {
         <input type="text" id="slug" placeholder="例如：my-link">
       </div>
       
+      <div class="checkbox-group">
+        <input type="checkbox" id="useAI" checked>
+        <label for="useAI">使用AI智能生成有意义的短链接后缀</label>
+      </div>
+      
       <button id="shortenBtn">生成短链接</button>
+      
+      <div class="ai-info">
+        <strong>AI智能生成功能：</strong>当您启用此功能时，系统会使用人工智能分析您的内容并生成一个有意义的英文关键词作为短链接后缀，使链接更易记且具有语义。
+      </div>
       
       <div id="result" class="result"></div>
       
       <div class="links-list">
         <h2>您的短链接</h2>
         <div id="linksList"></div>
+      </div>
+      
+      <div class="cache-info">
+        为了提高性能并节省请求配额，系统使用了智能缓存机制。热门链接会被自动缓存5分钟，减少数据库查询次数。
       </div>
     </div>
 
@@ -163,10 +221,18 @@ export function mainPageTemplate() {
       document.getElementById('shortenBtn').addEventListener('click', async () => {
         const content = document.getElementById('content').value.trim();
         const slug = document.getElementById('slug').value.trim();
+        const useAI = document.getElementById('useAI').checked;
         
         if (!content) {
           alert('请输入网址或文本内容');
           return;
+        }
+        
+        const requestBody = { content };
+        if (slug) {
+          requestBody.slug = slug;
+        } else if (useAI) {
+          requestBody.useAI = true;
         }
         
         const response = await fetch('/api/shorten', {
@@ -174,23 +240,36 @@ export function mainPageTemplate() {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ content, slug })
+          body: JSON.stringify(requestBody)
         });
         
         const result = await response.json();
         
         if (response.ok) {
           document.getElementById('result').style.display = 'block';
+          const aiMessage = result.isAI ? ' (AI智能生成)' : '';
           document.getElementById('result').innerHTML = 
-            \`<p>短链接创建成功: <a href="\${result.shortUrl}" target="_blank">\${result.shortUrl}</a></p>\`;
-          loadLinks();
+            \`<p>短链接创建成功\${aiMessage}: <a href="\${result.shortUrl}" target="_blank">\${result.shortUrl}</a></p>\`;
+          
+          // 创建成功后，延迟加载链接列表，避免过于频繁的请求
+          setTimeout(loadLinks, 1000);
         } else {
           alert(result.error || '创建短链接时发生错误');
         }
       });
       
-      // Load user's links
+      // Load user's links with cache consideration
+      let lastLoadTime = 0;
       async function loadLinks() {
+        const now = Date.now();
+        // 限制请求频率，至少间隔5秒
+        if (now - lastLoadTime < 5000) {
+          console.log('请求过于频繁，跳过本次请求');
+          return;
+        }
+        
+        lastLoadTime = now;
+        
         // In a real implementation, we would identify users by something more robust
         // For now, we'll just load all links for demo purposes
         const response = await fetch('/admin/api/links');
@@ -223,8 +302,11 @@ export function mainPageTemplate() {
         });
       }
       
-      // Load links on page load
-      loadLinks();
+      // 页面加载时获取链接列表
+      document.addEventListener('DOMContentLoaded', function() {
+        // 延迟加载，避免与其他初始化操作冲突
+        setTimeout(loadLinks, 500);
+      });
     </script>
   </body>
   </html>
