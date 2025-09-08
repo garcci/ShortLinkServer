@@ -1,0 +1,19 @@
+{
+  "name": "short-link-server",
+  "version": "1.0.0",
+  "description": "A Cloudflare Worker for short link service with D1 database",
+  "main": "src/index.js",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "keywords": [
+    "cloudflare",
+    "worker",
+    "short-link",
+    "d1"
+  ],
+  "author": "Developer",
+  "license": "MIT",
+  "devDependencies": {
+  }
+}
