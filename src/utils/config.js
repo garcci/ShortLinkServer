@@ -5,7 +5,7 @@
 
 // 缓存配置
 export const CACHE_CONFIG = {
-  TTL: 5 * 60 * 1000, // 5分钟缓存时间
+  TTL: 10 * 60 * 1000, // 10分钟缓存时间（增加缓存时间以减少请求）
   CLEANUP_INTERVAL: 60 * 1000 // 1分钟清理一次过期缓存
 };
 
@@ -17,8 +17,8 @@ export const PAGINATION_CONFIG = {
 
 // 请求频率限制配置
 export const RATE_LIMIT_CONFIG = {
-  MAIN_PAGE_LOAD_INTERVAL: 5000, // 主页面加载链接列表最小间隔（毫秒）
-  ADMIN_PAGE_LOAD_INTERVAL: 2000 // 管理员页面加载链接列表最小间隔（毫秒）
+  MAIN_PAGE_LOAD_INTERVAL: 10000, // 主页面加载链接列表最小间隔（10秒，增加间隔以减少请求）
+  ADMIN_PAGE_LOAD_INTERVAL: 5000  // 管理员页面加载链接列表最小间隔（5秒）
 };
 
 // AI配置
@@ -34,4 +34,10 @@ export const SLUG_CONFIG = {
   MAX_LENGTH: 30,
   MIN_LENGTH: 2,
   DEFAULT_LENGTH: 6
+};
+
+// 批处理配置
+export const BATCH_CONFIG = {
+  MAX_BATCH_SIZE: 50, // 最大批处理大小
+  BATCH_TIMEOUT: 100  // 批处理超时时间（毫秒）
 };

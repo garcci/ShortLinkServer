@@ -186,6 +186,15 @@ export function mainPageTemplate() {
         color: #6a1b9a;
       }
       
+      .markdown-info {
+        background-color: #e3f2fd;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 10px;
+        font-size: 0.9em;
+        color: #0d47a1;
+      }
+      
       .checkbox-group {
         display: flex;
         align-items: center;
@@ -226,6 +235,16 @@ export function mainPageTemplate() {
         background-color: var(--danger-color);
       }
       
+      .markdown-example {
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        padding: 10px;
+        margin-top: 10px;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: 0.85em;
+        white-space: pre-wrap;
+      }
+      
       @media (max-width: 600px) {
         .container {
           padding: 15px;
@@ -242,8 +261,8 @@ export function mainPageTemplate() {
     
     <div class="container">
       <div class="feature-highlight">
-        <h2>✨ AI智能短链接生成 ✨</h2>
-        <p>现在支持使用人工智能为您的链接生成有意义的短链接后缀</p>
+        <h2>✨ AI智能短链接生成 + Markdown支持 ✨</h2>
+        <p>现在支持使用人工智能生成短链接和Markdown格式文本展示</p>
       </div>
       
       <h1>短链接服务</h1>
@@ -254,6 +273,7 @@ export function mainPageTemplate() {
           <li>在上方输入框中粘贴长链接或输入文本内容</li>
           <li>可选择自定义短链接后缀，留空则自动生成</li>
           <li>启用"AI智能生成"可让AI为您创建有意义的短链接</li>
+          <li>支持Markdown格式文本，将自动渲染为精美格式</li>
           <li>点击"生成短链接"按钮完成创建</li>
           <li>访问短链接时，网址将自动跳转或显示文本内容</li>
         </ul>
@@ -261,7 +281,7 @@ export function mainPageTemplate() {
       
       <div class="form-group">
         <label for="content">请输入网址或文本内容：</label>
-        <textarea id="content" rows="4" placeholder="例如：https://example.com 或任意文本内容"></textarea>
+        <textarea id="content" rows="6" placeholder="例如：https://example.com 或任意文本内容&#10;&#10;支持Markdown格式，例如：&#10;# 标题&#10;**粗体文本** 和 *斜体文本*&#10;- 列表项1&#10;- 列表项2"></textarea>
       </div>
       
       <div class="form-group">
@@ -280,6 +300,19 @@ export function mainPageTemplate() {
         <strong>AI智能生成功能：</strong>当您启用此功能时，系统会使用人工智能分析您的内容并生成一个有意义的英文关键词作为短链接后缀，使链接更易记且具有语义。
       </div>
       
+      <div class="markdown-info">
+        <strong>Markdown支持：</strong>文本内容支持Markdown格式，系统将自动渲染为精美的格式化内容。支持标题、列表、代码块、粗体、斜体等常用Markdown语法。
+        <div class="markdown-example"># 标题一
+## 标题二
+**粗体文本** *斜体文本*
+- 列表项一
+- 列表项二
+\`行内代码\`
+\`\`\`
+代码块
+\`\`\`</div>
+      </div>
+      
       <div id="result" class="result"></div>
       
       <div class="links-list">
@@ -290,7 +323,7 @@ export function mainPageTemplate() {
       </div>
       
       <div class="cache-info">
-        为了提高性能并节省请求配额，系统使用了智能缓存机制。热门链接会被自动缓存5分钟，减少数据库查询次数。
+        为了提高性能并节省请求配额，系统使用了智能缓存机制。热门链接会被自动缓存10分钟，减少数据库查询次数。
       </div>
     </div>
 
@@ -371,8 +404,8 @@ export function mainPageTemplate() {
       let lastLoadTime = 0;
       async function loadLinks() {
         const now = Date.now();
-        // 限制请求频率，至少间隔5秒
-        if (now - lastLoadTime < 5000) {
+        // 限制请求频率，至少间隔10秒
+        if (now - lastLoadTime < 10000) {
           console.log('请求过于频繁，跳过本次请求');
           return;
         }
