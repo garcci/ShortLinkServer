@@ -281,7 +281,7 @@ export function mainPageTemplate() {
       
       <div class="form-group">
         <label for="content">请输入网址或文本内容：</label>
-        <textarea id="content" rows="6" placeholder="例如：https://example.com 或任意文本内容&#10;&#10;支持Markdown格式，例如：&#10;# 标题&#10;**粗体文本** 和 *斜体文本*&#10;- 列表项1&#10;- 列表项2"></textarea>
+        <textarea id="content" rows="6" placeholder="例如：https://example.com 或任意文本内容&#10;&#10;支持Markdown格式，例如：&#10;# 标题&#10;**粗体文本** 和 *斜体文本*&#10;- 列表项1&#10;- 列表项2&#10;![图片描述](图片链接)&#10;[链接文本](链接地址)"></textarea>
       </div>
       
       <div class="form-group">
@@ -301,16 +301,31 @@ export function mainPageTemplate() {
       </div>
       
       <div class="markdown-info">
-        <strong>Markdown支持：</strong>文本内容支持Markdown格式，系统将自动渲染为精美的格式化内容。支持标题、列表、代码块、粗体、斜体等常用Markdown语法。
-        <div class="markdown-example"># 标题一
-## 标题二
-**粗体文本** *斜体文本*
-- 列表项一
-- 列表项二
+        <strong>Markdown支持：</strong>文本内容支持Markdown格式，系统将自动渲染为精美的格式化内容。支持标题、列表、代码块、粗体、斜体、图片、链接等常用Markdown语法。
+        <div class="markdown-example"># 一级标题
+## 二级标题
+### 三级标题
+
+**粗体文本** *斜体文本* ~~删除线~~
+
+- 无序列表项一
+- 无序列表项二
+
+1. 有序列表项一
+2. 有序列表项二
+
+![图片描述](图片链接)
+[链接文本](链接地址)
+
 \`行内代码\`
+
 \`\`\`
 代码块
-\`\`\`</div>
+\`\`\`
+
+> 引用文本
+
+---</div>
       </div>
       
       <div id="result" class="result"></div>

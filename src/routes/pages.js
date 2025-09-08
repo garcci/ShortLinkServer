@@ -201,6 +201,22 @@ function handleTextPreview(link) {
       .content.markdown h3 {
         font-size: 1.25em;
       }
+      .content.markdown h4 {
+        font-size: 1.1em;
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+      }
+      .content.markdown h5 {
+        font-size: 1em;
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+      }
+      .content.markdown h6 {
+        font-size: 0.9em;
+        color: #6a737d;
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+      }
       .content.markdown p {
         margin: 1em 0;
       }
@@ -235,6 +251,29 @@ function handleTextPreview(link) {
         color: #6a737d;
         border-left: 0.25em solid #dfe2e5;
       }
+      .content.markdown img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 5px;
+        margin: 1em 0;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      }
+      .content.markdown a {
+        color: #3498db;
+        text-decoration: none;
+      }
+      .content.markdown a:hover {
+        text-decoration: underline;
+      }
+      .content.markdown hr {
+        border: none;
+        border-top: 1px solid #e1e4e8;
+        margin: 2em 0;
+      }
+      .content.markdown del {
+        color: #6a737d;
+      }
+
       .actions {
         display: flex;
         justify-content: center;
@@ -342,7 +381,7 @@ function handleMarkdownContent(link) {
         border-radius: 10px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       }
-      h1, h2, h3 {
+      h1, h2, h3, h4, h5, h6 {
         margin-top: 1.5em;
         margin-bottom: 0.5em;
       }
@@ -358,6 +397,16 @@ function handleMarkdownContent(link) {
       }
       h3 {
         font-size: 1.25em;
+      }
+      h4 {
+        font-size: 1.1em;
+      }
+      h5 {
+        font-size: 1em;
+      }
+      h6 {
+        font-size: 0.9em;
+        color: #6a737d;
       }
       p {
         margin: 1em 0;
@@ -392,6 +441,29 @@ function handleMarkdownContent(link) {
         color: #6a737d;
         border-left: 0.25em solid #dfe2e5;
       }
+      img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 5px;
+        margin: 1em 0;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      }
+      a {
+        color: #3498db;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      hr {
+        border: none;
+        border-top: 1px solid #e1e4e8;
+        margin: 2em 0;
+      }
+      del {
+        color: #6a737d;
+      }
+
       .header {
         text-align: center;
         margin-bottom: 30px;
@@ -434,8 +506,16 @@ function handleMarkdownContent(link) {
  * @returns {string} HTML内容
  */
 function renderMarkdown(markdown) {
+  // 处理图片 ![alt](src "title")
+  let html = markdown.replace(/!\[([^\]]*)\]\(([^)"\s]+)(?:\s*"([^"]*)")?\)/g, 
+    '<img src="$2" alt="$1" title="$3" style="max-width: 100%; height: auto;">');
+  
+  // 处理链接 [text](url "title")
+  html = html.replace(/\[([^\]]+)\]\(([^)"\s]+)(?:\s*"([^"]*)")?\)/g, 
+    '<a href="$2" title="$3" target="_blank">$1</a>');
+  
   // 处理代码块
-  let html = markdown.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
   
   // 处理行内代码
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -451,13 +531,20 @@ function renderMarkdown(markdown) {
   html = html.replace(/^\s*\d+\. (.+)$/gm, '<li>$1</li>');
   html = html.replace(/(<li>.+<\/li>)+/gs, '<ol>$&</ol>');
   
-  // 处理粗体
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // 处理水平线
+  html = html.replace(/^---$/gm, '<hr>');
   
-  // 处理斜体
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // 处理粗体和斜体（**text** 和 *text*）
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  
+  // 处理删除线
+  html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
   
   // 处理标题
+  html = html.replace(/^###### (.+)$/gm, '<h6>$1</h6>');
+  html = html.replace(/^##### (.+)$/gm, '<h5>$1</h5>');
+  html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
@@ -494,7 +581,11 @@ function isMarkdownContent(content) {
     /^\s*[-*+]\s/,      // 无序列表
     /^\s*\d+\.\s/,      // 有序列表
     /^> .*/,            // 引用
-    /```[\s\S]*?```/    // 代码块
+    /```[\s\S]*?```/,   // 代码块
+    /!\[.*\]\(.+\)/,    // 图片
+    /\[.*\]\(.+\)/,     // 链接
+    /~~.*~~/,           // 删除线
+    /^---$/             // 水平线
   ];
   
   return markdownPatterns.some(pattern => pattern.test(content));
